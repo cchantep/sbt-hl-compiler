@@ -22,9 +22,9 @@ You need to update the `project/plugins.sbt`.
 
 ```scala
 resolvers ++= Seq(
-  "Tatami Releases" at "https://raw.github.com/cchantep/tatami/master/releases",
+  "Tatami Releases" at "https://raw.github.com/cchantep/tatami/master/releases")
 
-addSbtPlugin("cchantep" % "sbt-hl-compiler" % "0.1")
+addSbtPlugin("cchantep" % "sbt-hl-compiler" % "0.2")
 ```
 
 By default, it will scan all the `*.md` files in the base directory.
@@ -52,6 +52,8 @@ excludeFilter in doc := "_excludes"
 // Default: undefined
 ```
 
+This plugin also append the `highlightDirectory` to the `watchSources` settings, so a documentation build is triggered each time a source document is updated.
+
 *See a SBT build [using this plugin](https://github.com/ReactiveMongo/reactivemongo-site/blob/gh-pages/build.sbt).*
 
 ## Extraction behaviour
@@ -77,6 +79,7 @@ trait SampleX {
 val foo = List("Bar", "Lorem", "Ipsum")
 
 }
+```
 
 All the code samples without a `package` in the same documentation files are also gather in a same generated package, `samplesY` in the previous example.
 
@@ -93,8 +96,3 @@ It allows to share some definitions accross the code samples of a documentation 
     ```scala
     value.foo()
     ```
-
-
-- Code samples extracted from a same documentation files are
-
-// !! 1 doc file = n sample in 1 package (with package object)
