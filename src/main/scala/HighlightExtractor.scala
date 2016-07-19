@@ -33,6 +33,11 @@ object HighlightExtractorPlugin extends AutoPlugin {
     highlightEndToken := "```",
     highlightDirectory := baseDirectory.value,
     includeFilter in doc := "*.md",
+    mappings in (Compile, packageBin) ~= {
+      (_: Seq[(File, String)]).filter {
+        case (_, target) => !target.startsWith("highlightextractor/")
+      }
+    },
     markdownSources := {
       val filter = (includeFilter in doc).value
       val excludes = (excludeFilter in doc).value.accept(_)
@@ -83,23 +88,26 @@ final class HighlightExtractor(
     }
   }
 
-  private def generate(out: File)(path: String, generated: Seq[File], samples: Seq[String], lines: Iterator[String], ln: Long, pkgi: Long): (Seq[File], Seq[String]) =
+  private def generate(out: File)(input: File, generated: Seq[File], samples: Seq[String], lines: Iterator[String], ln: Long, pkgi: Long): (Seq[File], Seq[String]) =
     if (!lines.hasNext) (generated -> samples) else {
       val line = lines.next()
 
       if (line contains startToken) {
         val n = generated.size
-        val f = out / s"sample-$n.scala"
+        val in = input.getName.replaceAll("\\.", "-")
+        val sn = s"$in-$ln-$n.scala"
+        val f = out / sn
         lazy val p = new PrintWriter(new java.io.FileOutputStream(f))
         val first = lines.next()
         val pkg = first startsWith "package "
 
-        log.info(s"Generating the sample #$n ...")
+        log.info(s"Generating the sample #$n ($sn) ...")
 
         try {
-          if (!pkg) p.println(s"package samples$pkgi\n\ntrait Sample$n {")
+          if (!pkg) p.println(
+            s"package highlightextractor.samples$pkgi\n\ntrait Sample$n {")
 
-          p.println(s"// File '$path', line ${ln + 1}\n")
+          p.println(s"// File '${input.getAbsolutePath}', line ${ln + 1}\n")
 
           val (rem, no) = generateFile(Iterator(first) ++ lines, p, ln + 1L)
 
@@ -110,17 +118,17 @@ final class HighlightExtractor(
 
           val sa = if (pkg) samples else samples :+ s"Sample$n"
 
-          generate(out)(path, generated :+ f, sa, rem, no, pkgi)
+          generate(out)(input, generated :+ f, sa, rem, no, pkgi)
         } finally { p.close() }
-      } else generate(out)(path, generated, samples, lines, ln + 1, pkgi)
+      } else generate(out)(input, generated, samples, lines, ln + 1, pkgi)
     }
 
-  private def genPkg(out:File, i: Long, samples: Seq[String]): File = {
+  private def genPkg(out: File, i: Long, samples: Seq[String]): File = {
     val pkgf = out / s"package$i.scala"
     lazy val pkgout = new PrintWriter(new java.io.FileOutputStream(pkgf))
 
     try {
-      pkgout.print(s"package object samples$i")
+      pkgout.print(s"package highlightextractor\r\npackage object samples$i")
 
       samples.headOption.foreach { n =>
         pkgout.print(s"\n  extends $n")
@@ -146,8 +154,8 @@ final class HighlightExtractor(
       case ((generated, samples), f) => {
         log.info(s"Processing $f ...")
 
-        val pi = generated.size
-        val (g, s) = gen(f.getAbsolutePath, generated, Nil,
+        val pi = Math.abs(this.hashCode * (generated.size + 1))
+        val (g, s) = gen(f, generated, Nil,
           scala.io.Source.fromFile(f).getLines, 1L, pi)
         val pf = genPkg(out, pi, s)
 
