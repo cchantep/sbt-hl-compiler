@@ -38,6 +38,8 @@ object HighlightExtractorPlugin extends AutoPlugin {
         case (_, target) => !target.startsWith("highlightextractor/")
       }
     },
+    scalacOptions in (Compile, doc) ++= List(
+      "-skip-packages", "highlightextractor"),
     markdownSources := {
       val filter = (includeFilter in doc).value
       val excludes = (excludeFilter in doc).value.accept(_)
@@ -63,8 +65,7 @@ object HighlightExtractorPlugin extends AutoPlugin {
       val log = streams.value.log
 
       new HighlightExtractor(src, out, st, et, log).apply()
-    },
-    fork in Test := true
+    }
   )
 }
 
