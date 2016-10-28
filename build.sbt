@@ -4,6 +4,6 @@ name := "sbt-hl-compiler"
 
 organization := "cchantep"
 
-version := "0.2"
+version := "0.3"
 
 libraryDependencies += "commons-io" % "commons-io" % "2.4"
