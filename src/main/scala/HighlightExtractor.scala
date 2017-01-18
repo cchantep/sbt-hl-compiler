@@ -13,6 +13,21 @@ object HighlightExtractorPlugin extends AutoPlugin {
   override def requires = JvmPlugin
 
   object autoImport {
+    sealed trait HLActivation
+
+    case object HLEnabledByDefault extends HLActivation {
+      override val toString = "<hl-enabled-by-default>"
+    }
+
+    case class HLEnabledBySysProp(propName: String) extends HLActivation {
+      override val toString = s"<hl-enabled-by-system-property: $propName>"
+    }
+
+    /** Enabled by default, but disabled in case of system property. */
+    case class HLDisabledBySysProp(propName: String) extends HLActivation {
+      override val toString = s"<hl-disabled-by-system-property: $propName>"
+    }
+
     val highlightStartToken = SettingKey[String]("highlightStartToken",
       """Token indicating a highlight starts; default: "```scala"""")
 
@@ -21,6 +36,9 @@ object HighlightExtractorPlugin extends AutoPlugin {
 
     val highlightDirectory = SettingKey[File]("highlightDirectory",
       """Directory to be scanned; default: baseDirectory""")
+
+    val highlightActivation = SettingKey[HLActivation]("highlightActivation",
+      """Activation of the highlight compiler; default: activated""")
   }
 
   import autoImport._
@@ -28,19 +46,28 @@ object HighlightExtractorPlugin extends AutoPlugin {
   private val markdownSources =
     SettingKey[Seq[File]]("highlightMarkdownSources")
 
+  private def activated[T](setting: HLActivation, default: T)(f: => T): T =
+    setting match {
+      case HLEnabledBySysProp(p) if sys.props.get(p).isDefined => f
+      case HLDisabledBySysProp(p) if !sys.props.get(p).isDefined => f
+      case HLEnabledByDefault => f
+      case _ => default
+    }
+
   override def projectSettings = Seq(
     highlightStartToken := "```scala",
     highlightEndToken := "```",
     highlightDirectory := baseDirectory.value,
+    highlightActivation := HLEnabledByDefault,
     includeFilter in doc := "*.md",
     mappings in (Compile, packageBin) ~= {
       (_: Seq[(File, String)]).filter {
         case (_, target) => !target.startsWith("highlightextractor/")
       }
     },
-    scalacOptions in (Compile, doc) ++= List(
-      "-skip-packages", "highlightextractor"),
-    markdownSources := {
+    scalacOptions in (Compile, doc) ++= activated(highlightActivation.value,
+      List.empty[String]) { List("-skip-packages", "highlightextractor") },
+    markdownSources := activated(highlightActivation.value, Seq.empty[File]) {
       val filter = (includeFilter in doc).value
       val excludes = (excludeFilter in doc).value.accept(_)
       val iofilter = new IOFileFilter {
@@ -56,15 +83,23 @@ object HighlightExtractorPlugin extends AutoPlugin {
         highlightDirectory.value, iofilter, dirfilter).
         asScala.filterNot(excludes).toSeq
     },
-    watchSources := markdownSources.value,
+    watchSources := activated(highlightActivation.value, watchSources.value) {
+      markdownSources.value
+    },
     sourceGenerators in Compile <+= Def.task {
-      val src = markdownSources.value
-      val out = sourceManaged.value
-      val st = (highlightStartToken in ThisBuild).or(highlightStartToken).value
-      val et = (highlightEndToken in ThisBuild).or(highlightEndToken).value
-      val log = streams.value.log
+      activated(highlightActivation.value, Seq.empty[File]) {
+        val src = markdownSources.value
+        val out = sourceManaged.value
+        val st = (highlightStartToken in ThisBuild).
+          or(highlightStartToken).value
 
-      new HighlightExtractor(src, out, st, et, log).apply()
+        val et = (highlightEndToken in ThisBuild).
+          or(highlightEndToken).value
+
+        val log = streams.value.log
+
+        new HighlightExtractor(src, out, st, et, log).apply()
+      }
     }
   )
 }
