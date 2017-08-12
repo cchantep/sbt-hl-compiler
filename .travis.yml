@@ -6,4 +6,4 @@ cache:
   directories:
   - $HOME/.ivy2
   - $HOME/.sbt
-script: sbt test-only
+script: sbt '^ testOnly'
