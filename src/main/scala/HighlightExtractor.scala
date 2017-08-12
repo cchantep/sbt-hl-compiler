@@ -1,7 +1,8 @@
 package cchantep
 
-import sbt.Keys._
 import sbt._
+import sbt.Keys._
+
 import sbt.plugins.JvmPlugin
 
 object HighlightExtractorPlugin extends AutoPlugin {
@@ -43,16 +44,9 @@ object HighlightExtractorPlugin extends AutoPlugin {
 
   import autoImport._
 
-  private val markdownSources =
-    SettingKey[Seq[File]]("highlightMarkdownSources")
+  import SbtCompat.{ WatchSource => Src }
 
-  private def activated[T](setting: HLActivation, default: T)(f: => T): T =
-    setting match {
-      case HLEnabledBySysProp(p) if sys.props.get(p).isDefined => f
-      case HLDisabledBySysProp(p) if !sys.props.get(p).isDefined => f
-      case HLEnabledByDefault => f
-      case _ => default
-    }
+  val markdownSources = SettingKey[Seq[Src]]("highlightMarkdownSources")
 
   override def projectSettings = Seq(
     highlightStartToken := "```scala",
@@ -67,28 +61,15 @@ object HighlightExtractorPlugin extends AutoPlugin {
     },
     scalacOptions in (Compile, doc) ++= activated(highlightActivation.value,
       List.empty[String]) { List("-skip-packages", "highlightextractor") },
-    markdownSources := activated(highlightActivation.value, Seq.empty[File]) {
-      val filter = (includeFilter in doc).value
-      val excludes = (excludeFilter in doc).value.accept(_)
-      val iofilter = new IOFileFilter {
-        def accept(f: File) = filter.accept(f)
-        def accept(d: File, n: String) = !excludes(d) && accept(d / n)
-      }
-      val dirfilter = new IOFileFilter {
-        def accept(f: File) = !excludes(f)
-        def accept(d: File, n: String) = accept(d / n)
-      }
-
-      FileUtils.listFiles(
-        highlightDirectory.value, iofilter, dirfilter).
-        asScala.filterNot(excludes).toSeq
+    markdownSources := activated(highlightActivation.value, Seq.empty[Src]) {
+      SbtCompat.markdownSources.value
     },
     watchSources := activated(highlightActivation.value, watchSources.value) {
       markdownSources.value
     },
-    sourceGenerators in Compile <+= Def.task {
+    sourceGenerators in Compile += (Def.task {
       activated(highlightActivation.value, Seq.empty[File]) {
-        val src = markdownSources.value
+        val src = SbtCompat.markdownFiles.value
         val out = sourceManaged.value
         val st = (highlightStartToken in ThisBuild).
           or(highlightStartToken).value
@@ -100,8 +81,37 @@ object HighlightExtractorPlugin extends AutoPlugin {
 
         new HighlightExtractor(src, out, st, et, log).apply()
       }
-    }
+    }).taskValue
   )
+
+  // ---
+
+  private def activated[T](setting: HLActivation, default: T)(f: => T): T =
+    setting match {
+      case HLEnabledBySysProp(p) if sys.props.get(p).isDefined => f
+      case HLDisabledBySysProp(p) if !sys.props.get(p).isDefined => f
+      case HLEnabledByDefault => f
+      case _ => default
+    }
+
+  private[cchantep] def listFiles(
+    dir: File,
+    includeFilter: FileFilter,
+    excludeFilter: FileFilter
+  ): Seq[File] = {
+    val excludes = excludeFilter.accept(_)
+    val iofilter = new IOFileFilter {
+      def accept(f: File) = includeFilter.accept(f)
+      def accept(d: File, n: String) = !excludes(d) && accept(d / n)
+    }
+    val dirfilter = new IOFileFilter {
+      def accept(f: File) = !excludes(f)
+      def accept(d: File, n: String) = accept(d / n)
+    }
+
+    FileUtils.listFiles(dir, iofilter, dirfilter).
+      asScala.filterNot(excludes).toSeq
+  }
 }
 
 final class HighlightExtractor(
