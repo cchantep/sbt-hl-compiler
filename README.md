@@ -24,7 +24,7 @@ You need to update the `project/plugins.sbt`.
 resolvers ++= Seq(
   "Tatami Releases" at "https://raw.github.com/cchantep/tatami/master/releases")
 
-addSbtPlugin("cchantep" % "sbt-hl-compiler" % "0.2")
+addSbtPlugin("cchantep" % "sbt-hl-compiler" % "0.5")
 ```
 
 By default, it will scan all the `*.md` files in the base directory.
