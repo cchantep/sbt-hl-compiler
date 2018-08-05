@@ -2,7 +2,7 @@
 
 This SBT plugin extracts the Scala examples from a markdown/jekyllrb documentation, and compile the extracted codes, to keep the documentation valid.
 
-## Context
+## Motivation
 
 Considering a documentation using a markdown format with some Scala code samples as following.
 
@@ -24,7 +24,7 @@ You need to update the `project/plugins.sbt`.
 resolvers ++= Seq(
   "Tatami Releases" at "https://raw.github.com/cchantep/tatami/master/releases")
 
-addSbtPlugin("cchantep" % "sbt-hl-compiler" % "0.5")
+addSbtPlugin("cchantep" % "sbt-hl-compiler" % "0.6")
 ```
 
 By default, it will scan all the `*.md` files in the base directory.
@@ -96,3 +96,11 @@ It allows to share some definitions accross the code samples of a documentation 
     ```scala
     value.foo()
     ```
+
+## Build
+
+This is built using SBT.
+
+    sbt '^ publishLocal'
+
+[![Build Status](https://travis-ci.org/cchantep/sbt-hl-compiler.svg?branch=master)](https://travis-ci.org/cchantep/sbt-hl-compiler)
