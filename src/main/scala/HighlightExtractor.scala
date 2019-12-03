@@ -54,30 +54,35 @@ object HighlightExtractorPlugin extends AutoPlugin {
     highlightDirectory := baseDirectory.value,
     highlightActivation := HLEnabledByDefault,
     includeFilter in doc := "*.md",
-    mappings in (Compile, packageBin) ~= {
+    mappings in (Test, packageBin) ~= {
       (_: Seq[(File, String)]).filter {
         case (_, target) => !target.startsWith("highlightextractor/")
       }
     },
-    scalacOptions in (Compile, doc) ++= activated(highlightActivation.value,
+    scalacOptions in (Test, doc) ++= activated(highlightActivation.value,
       List.empty[String]) { List("-skip-packages", "highlightextractor") },
     markdownSources := activated(highlightActivation.value, Seq.empty[Src]) {
       SbtCompat.markdownSources.value
     },
-    watchSources := activated(highlightActivation.value, watchSources.value) {
+    watchSources in Test := activated(
+      highlightActivation.value, watchSources.value) {
       markdownSources.value
     },
-    sourceGenerators in Compile += (Def.task {
-      activated(highlightActivation.value, Seq.empty[File]) {
-        val src = SbtCompat.markdownFiles.value
-        val out = sourceManaged.value
-        val st = (highlightStartToken in ThisBuild).
-          or(highlightStartToken).value
+    sourceGenerators in Test += (Def.task {
+      val log = streams.value.log
+      val src = SbtCompat.markdownFiles.value
 
-        val et = (highlightEndToken in ThisBuild).
-          or(highlightEndToken).value
+      val st = (highlightStartToken in ThisBuild).
+        or(highlightStartToken).value
 
-        val log = streams.value.log
+      val et = (highlightEndToken in ThisBuild).
+        or(highlightEndToken).value
+
+      if (!autoScalaLibrary.value) {
+        log.warn(s"Skip highlight extraction on non-Scala project: ${thisProject.value.id}")
+        Seq.empty
+      } else activated(highlightActivation.value, Seq.empty[File]) {
+        val out = (sourceManaged in Test).value
 
         new HighlightExtractor(src, out, st, et, log).apply()
       }
