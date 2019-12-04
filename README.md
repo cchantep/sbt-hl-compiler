@@ -56,6 +56,16 @@ This plugin also append the `highlightDirectory` to the `watchSources` settings,
 
 *See a SBT build [using this plugin](https://github.com/ReactiveMongo/reactivemongo-site/blob/gh-pages/build.sbt).*
 
+**In case of SBT [Multi-Project](https://www.scala-sbt.org/1.x/docs/Multi-Project.html)**
+
+It may be required to disable this plugin on the aggregation if some examples in files of the sub-project require some dependencies specific to the sub-project (not available at the aggregation time).
+
+```scala
+lazy val root = Project(id = "...", base = file(".")).
+  aggregate(/* ... */).
+  disablePlugins(HighlightExtractorPlugin)
+```
+
 ## Extraction behaviour
 
 If a code sample doesn't start with a `package ...` statement, the `.scala` generated file wraps this code in a `trait` with a unique name.
