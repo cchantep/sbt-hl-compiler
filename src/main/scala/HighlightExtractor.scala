@@ -152,7 +152,7 @@ final class HighlightExtractor(
         val first = lines.next()
         val pkg = first startsWith "package "
 
-        log.info(s"Generating the sample #$n ($sn) ...")
+        log.debug(s"Generating the sample #$n ($sn) ...")
 
         try {
           if (!pkg) p.println(
