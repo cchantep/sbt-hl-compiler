@@ -4,7 +4,7 @@ name := "sbt-hl-compiler"
 
 organization := "cchantep"
 
-version := "0.8"
+version := "0.10"
 
 crossSbtVersions := Vector("0.13.11", "1.3.4")
 

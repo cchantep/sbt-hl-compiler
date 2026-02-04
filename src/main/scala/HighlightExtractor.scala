@@ -60,7 +60,13 @@ object HighlightExtractorPlugin extends AutoPlugin {
       }
     },
     scalacOptions in (Test, doc) ++= activated(highlightActivation.value,
-      List.empty[String]) { List("-skip-packages", "highlightextractor") },
+      Seq.empty[String]) {
+      if (scalaBinaryVersion.value startsWith "2.") {
+        Seq("-skip-packages", "highlightextractor")
+      } else {
+        Seq("-skip-by-id:highlightextractor")
+      }
+    },
     markdownSources := activated(highlightActivation.value, Seq.empty[Src]) {
       SbtCompat.markdownSources.value
     },
@@ -71,6 +77,7 @@ object HighlightExtractorPlugin extends AutoPlugin {
     sourceGenerators in Test += (Def.task {
       val log = streams.value.log
       val src = SbtCompat.markdownFiles.value
+      val cacheDir = streams.value.cacheDirectory
 
       val st = (highlightStartToken in ThisBuild).
         or(highlightStartToken).value
@@ -84,7 +91,39 @@ object HighlightExtractorPlugin extends AutoPlugin {
       } else activated(highlightActivation.value, Seq.empty[File]) {
         val out = (sourceManaged in Test).value
 
-        new HighlightExtractor(src, out, st, et, log).apply()
+        // Track token changes to invalidate cache when configuration changes
+        val tokenFile = cacheDir / "highlight-extractor" / "tokens"
+        val currentTokens = s"$st\n$et"
+        val tokensChanged = !tokenFile.exists() ||
+          IO.read(tokenFile) != currentTokens
+
+        if (tokensChanged) {
+          log.info("Token configuration changed, regenerating all files...")
+          // Clean the cache FIRST to force regeneration
+          IO.delete(cacheDir / "highlight-extractor")
+          // THEN write the tokens file (after directory is recreated by IO.write)
+          IO.write(tokenFile, currentTokens)
+        }
+
+        // Use Tracked.diffInputs for true per-file incremental compilation
+        val srcSet = src.toSet
+        
+        Tracked.diffInputs(
+          cacheDir / "highlight-extractor" / "inputs",
+          FilesInfo.lastModified
+        )(srcSet) { changeReport =>
+          // Determine which files actually changed
+          val changedFiles = changeReport.modified ++ changeReport.added
+
+          if (changedFiles.nonEmpty) {
+            log.info(s"Processing snippets from ${changedFiles.size} changed documentation file(s)")
+
+            new HighlightExtractor(changedFiles.toSeq, out, st, et, log).apply()
+          } else {
+            // Return existing generated files
+            (out ** "*.scala").get
+          }
+        }
       }
     }).taskValue
   )
@@ -200,18 +239,32 @@ final class HighlightExtractor(
 
   def apply(): Seq[File] = {
     out.mkdirs()
-    val gen = generate(out) _
-    sources.foldLeft(Seq.empty[File] -> Seq.empty[String]) {
-      case ((generated, samples), f) => {
-        log.info(s"Processing $f ...")
 
-        val pi = Math.abs(this.hashCode * (generated.size + 1))
-        val (g, s) = gen(f, generated, Nil,
-          scala.io.Source.fromFile(f).getLines, 1L, pi)
-        val pf = genPkg(out, pi, s)
+    // Process each source file independently for better incremental compilation
+    sources.flatMap { sourceFile =>
+      log.info(s"Processing $sourceFile ...")
 
-        (g :+ pf) -> (samples ++ s)
+      // Use file-specific hash for stable package names across rebuilds
+      val pi = Math.abs(sourceFile.hashCode)
+      val lines = scala.io.Source.fromFile(sourceFile).getLines
+
+      val (generated, samples) = generate(out)(
+        sourceFile,
+        Seq.empty[File],
+        Nil,
+        lines,
+        1L,
+        pi
+      )
+
+      // Only generate package object if there are samples
+      val pkgFile = if (samples.nonEmpty) {
+        Seq(genPkg(out, pi, samples))
+      } else {
+        Seq.empty[File]
       }
-    }._1
+
+      generated ++ pkgFile
+    }
   }
 }

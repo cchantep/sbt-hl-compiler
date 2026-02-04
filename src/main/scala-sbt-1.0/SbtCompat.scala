@@ -12,16 +12,16 @@ private[cchantep] object SbtCompat {
 
   val markdownSources = Def.setting[Seq[WatchSource]] {
     val base = highlightDirectory.value
-    val incFilter = (includeFilter in doc).value
-    val excFilter = (excludeFilter in doc).value
+    val incFilter = (doc / includeFilter).value
+    val excFilter = (doc / excludeFilter).value
 
     Seq(new Source(base, incFilter, excFilter))
   }
 
   val markdownFiles = Def.setting[Seq[File]] {
     val base = highlightDirectory.value
-    val incFilter = (includeFilter in doc).value
-    val excFilter = (excludeFilter in doc).value
+    val incFilter = (doc / includeFilter).value
+    val excFilter = (doc / excludeFilter).value
 
     HighlightExtractorPlugin.listFiles(base, incFilter, excFilter)
   }
