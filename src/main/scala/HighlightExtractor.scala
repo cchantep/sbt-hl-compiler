@@ -5,6 +5,8 @@ import sbt.Keys._
 
 import sbt.plugins.JvmPlugin
 
+import sbtcompat.PluginCompat._
+
 object HighlightExtractorPlugin extends AutoPlugin {
   import scala.collection.JavaConverters._
   import org.apache.commons.io.FileUtils
@@ -38,13 +40,14 @@ object HighlightExtractorPlugin extends AutoPlugin {
     val highlightDirectory = SettingKey[File]("highlightDirectory",
       """Directory to be scanned; default: baseDirectory""")
 
+    @transient
     val highlightActivation = SettingKey[HLActivation]("highlightActivation",
       """Activation of the highlight compiler; default: activated""")
   }
 
   import autoImport._
 
-  import SbtCompat.{ WatchSource => Src }
+  import SbtCompat.{ WatchSource => Src, _ }
 
   val markdownSources = SettingKey[Seq[Src]]("highlightMarkdownSources")
 
@@ -53,13 +56,13 @@ object HighlightExtractorPlugin extends AutoPlugin {
     highlightEndToken := "```",
     highlightDirectory := baseDirectory.value,
     highlightActivation := HLEnabledByDefault,
-    includeFilter in doc := "*.md",
-    mappings in (Test, packageBin) ~= {
-      (_: Seq[(File, String)]).filter {
+    doc / includeFilter := "*.md",
+    Test / packageBin / mappings ~= {
+      (_: Seq[(FileRef, String)]).filter {
         case (_, target) => !target.startsWith("highlightextractor/")
       }
     },
-    scalacOptions in (Test, doc) ++= activated(highlightActivation.value,
+    Test / doc / scalacOptions ++= activated(highlightActivation.value,
       Seq.empty[String]) {
       if (scalaBinaryVersion.value startsWith "2.") {
         Seq("-skip-packages", "highlightextractor")
@@ -70,26 +73,28 @@ object HighlightExtractorPlugin extends AutoPlugin {
     markdownSources := activated(highlightActivation.value, Seq.empty[Src]) {
       SbtCompat.markdownSources.value
     },
-    watchSources in Test := activated(
-      highlightActivation.value, watchSources.value) {
-      markdownSources.value
+    Test / watchSources := Def.uncached {
+      activated(
+        highlightActivation.value, watchSources.value) {
+        markdownSources.value
+      }
     },
-    sourceGenerators in Test += (Def.task {
+    Test / sourceGenerators += (Def.task {
       val log = streams.value.log
       val src = SbtCompat.markdownFiles.value
       val cacheDir = streams.value.cacheDirectory
 
-      val st = (highlightStartToken in ThisBuild).
+      val st = (ThisBuild / highlightStartToken).
         or(highlightStartToken).value
 
-      val et = (highlightEndToken in ThisBuild).
+      val et = (ThisBuild / highlightEndToken).
         or(highlightEndToken).value
 
       if (!autoScalaLibrary.value) {
         log.warn(s"Skip highlight extraction on non-Scala project: ${thisProject.value.id}")
         Seq.empty
       } else activated(highlightActivation.value, Seq.empty[File]) {
-        val out = (sourceManaged in Test).value
+        val out = (Test / sourceManaged).value
 
         // Track token changes to invalidate cache when configuration changes
         val tokenFile = cacheDir / "highlight-extractor" / "tokens"
@@ -121,7 +126,7 @@ object HighlightExtractorPlugin extends AutoPlugin {
             new HighlightExtractor(changedFiles.toSeq, out, st, et, log).apply()
           } else {
             // Return existing generated files
-            (out ** "*.scala").get
+            (out ** "*.scala").get()
           }
         }
       }
@@ -130,7 +135,7 @@ object HighlightExtractorPlugin extends AutoPlugin {
 
   // ---
 
-  private def activated[T](setting: HLActivation, default: T)(f: => T): T =
+  private[cchantep] def activated[T](setting: HLActivation, default: T)(f: => T): T =
     setting match {
       case HLEnabledBySysProp(p) if sys.props.get(p).isDefined => f
       case HLDisabledBySysProp(p) if !sys.props.get(p).isDefined => f
@@ -246,7 +251,7 @@ final class HighlightExtractor(
 
       // Use file-specific hash for stable package names across rebuilds
       val pi = Math.abs(sourceFile.hashCode)
-      val lines = scala.io.Source.fromFile(sourceFile).getLines
+      val lines = scala.io.Source.fromFile(sourceFile).getLines()
 
       val (generated, samples) = generate(out)(
         sourceFile,
