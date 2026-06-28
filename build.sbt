@@ -22,7 +22,7 @@ scalaVersion := {
 
 libraryDependencies ++= Seq(
   "commons-io" % "commons-io" % "2.22.0",
-  "org.specs2" %% "specs2-core" % "4.23.0" % Test
+  "org.specs2" %% "specs2-core" % "5.9.1" % Test
 )
 
 ThisBuild / publishTo := sys.env.get("REPO_PATH").map { path =>
