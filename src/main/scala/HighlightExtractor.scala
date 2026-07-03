@@ -8,7 +8,7 @@ import sbt.plugins.JvmPlugin
 import sbtcompat.PluginCompat._
 
 object HighlightExtractorPlugin extends AutoPlugin {
-  import scala.collection.JavaConverters._
+  import scala.jdk.CollectionConverters._
   import org.apache.commons.io.FileUtils
   import org.apache.commons.io.filefilter.{ IOFileFilter, TrueFileFilter }
 
@@ -62,12 +62,14 @@ object HighlightExtractorPlugin extends AutoPlugin {
         case (_, target) => !target.startsWith("highlightextractor/")
       }
     },
-    Test / doc / scalacOptions ++= activated(highlightActivation.value,
-      Seq.empty[String]) {
-      if (scalaBinaryVersion.value startsWith "2.") {
-        Seq("-skip-packages", "highlightextractor")
-      } else {
-        Seq("-skip-by-id:highlightextractor")
+    Test / doc / scalacOptions ++= Def.uncached {
+      activated(highlightActivation.value,
+        Seq.empty[String]) {
+        if (scalaBinaryVersion.value.startsWith("2.")) {
+          Seq("-skip-packages", "highlightextractor")
+        } else {
+          Seq("-skip-by-id:highlightextractor")
+        }
       }
     },
     markdownSources := activated(highlightActivation.value, Seq.empty[Src]) {
@@ -103,9 +105,11 @@ object HighlightExtractorPlugin extends AutoPlugin {
           IO.read(tokenFile) != currentTokens
 
         if (tokensChanged) {
-          log.info("Token configuration changed, regenerating all files...")
+          log.debug("Token configuration changed, regenerating all files...")
+
           // Clean the cache FIRST to force regeneration
           IO.delete(cacheDir / "highlight-extractor")
+
           // THEN write the tokens file (after directory is recreated by IO.write)
           IO.write(tokenFile, currentTokens)
         }
@@ -183,24 +187,28 @@ final class HighlightExtractor(
     }
   }
 
-  private def generate(out: File)(input: File, generated: Seq[File], samples: Seq[String], lines: Iterator[String], ln: Long, pkgi: Long): (Seq[File], Seq[String]) =
-    if (!lines.hasNext) (generated -> samples) else {
+  private def generate(out: File)(input: File, generated: Seq[File], inSyntheticPkg: Int, samples: Seq[String], lines: Iterator[String], ln: Long, pkgi: Long): (Seq[File], Seq[String]) =
+    if (!lines.hasNext) {
+      generated -> samples
+    } else {
       val line = lines.next()
 
-      if (line contains startToken) {
-        val n = generated.size
+      if (line.contains(startToken)) {
+        val n = inSyntheticPkg + 1
         val in = input.getName.replaceAll("\\.", "-")
-        val sn = s"$in-$ln-$n.scala"
+        val sn = s"$in-$pkgi-$ln-$n.scala"
         val f = out / sn
         lazy val p = new PrintWriter(new java.io.FileOutputStream(f))
         val first = lines.next()
-        val pkg = first startsWith "package "
+        val pkg = first.startsWith("package ")
 
-        log.debug(s"Generating the sample #$n ($sn) ...")
+        log.debug(s"Generating sample #$n from ${input.getAbsolutePath} ($sn) ...")
 
         try {
-          if (!pkg) p.println(
-            s"package highlightextractor.samples$pkgi\n\ntrait Sample$n {")
+          if (!pkg) {
+            p.println(
+              s"package highlightextractor.samples$pkgi\n\ntrait Sample$n {")
+          }
 
           p.println(s"// File '${input.getAbsolutePath}', line ${ln + 1}\n")
 
@@ -213,17 +221,21 @@ final class HighlightExtractor(
 
           val sa = if (pkg) samples else samples :+ s"Sample$n"
 
-          generate(out)(input, generated :+ f, sa, rem, no, pkgi)
+          generate(out)(input, generated :+ f, {
+            if (pkg) inSyntheticPkg
+            else (inSyntheticPkg + 1)
+          }, sa, rem, no, pkgi)
         } finally { p.close() }
-      } else generate(out)(input, generated, samples, lines, ln + 1, pkgi)
+      } else generate(out)(input, generated, inSyntheticPkg, samples, lines, ln + 1, pkgi)
     }
 
-  private def genPkg(out: File, i: Long, samples: Seq[String]): File = {
+  private def genPkg(source: File, out: File, i: Long, samples: Seq[String]): File = {
     val pkgf = out / s"package$i.scala"
     lazy val pkgout = new PrintWriter(new java.io.FileOutputStream(pkgf))
 
     try {
-      pkgout.print(s"package highlightextractor\r\npackage object samples$i")
+      pkgout.print(s"""// File '${source.getAbsolutePath}'
+package highlightextractor\r\npackage object samples$i""")
 
       samples.headOption.foreach { n =>
         pkgout.print(s"\n  extends $n")
@@ -256,6 +268,7 @@ final class HighlightExtractor(
       val (generated, samples) = generate(out)(
         sourceFile,
         Seq.empty[File],
+        0,
         Nil,
         lines,
         1L,
@@ -264,7 +277,7 @@ final class HighlightExtractor(
 
       // Only generate package object if there are samples
       val pkgFile = if (samples.nonEmpty) {
-        Seq(genPkg(out, pi, samples))
+        Seq(genPkg(sourceFile, out, pi, samples))
       } else {
         Seq.empty[File]
       }
