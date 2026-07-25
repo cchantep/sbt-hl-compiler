@@ -6,7 +6,7 @@ organization := "cchantep"
 
 version := "0.12"
 
-addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.1.0")
+addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.2.0")
 
 crossSbtVersions := Vector("1.12.3", "2.0.0")
 
