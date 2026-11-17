@@ -158,6 +158,6 @@ This allows sharing definitions across code samples within a documentation file.
 
 This is built using SBT.
 
-    sbt '^ publishLocal'
+    sbt '+publishLocal'
 
 [![Build Status](https://travis-ci.org/cchantep/sbt-hl-compiler.svg?branch=master)](https://travis-ci.org/cchantep/sbt-hl-compiler)
