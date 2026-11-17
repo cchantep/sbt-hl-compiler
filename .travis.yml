@@ -1,8 +1,7 @@
-dist: trusty
+dist: jammy
 language: scala
 jdk:
-  - oraclejdk8
-  - oraclejdk9
+  - openjdk17
 sudo: false
 cache:
   directories:
@@ -18,4 +17,4 @@ install:
     tar zxf $HOME/sbt.tgz -C $HOME
     sudo rm /usr/local/bin/sbt
     sudo ln -s $HOME/sbt/bin/sbt /usr/local/bin/sbt
-script: sbt '^ testOnly'
+script: sbt '+testOnly'
